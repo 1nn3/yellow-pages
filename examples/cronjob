@@ -1,0 +1,8 @@
+#!/usr/bin/env -S chronic flock -n ${HOME}/yellow-pages/cronjob bash
+set -xe
+export PATH=".:/usr/local/bin:/usr/bin:/bin"
+export USER=${USER:-$LOGNAME}
+cd ~/yellow-pages || exit
+mk-tlds
+start-zonewalk
+

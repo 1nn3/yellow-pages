@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -x
+#set -e
+export PATH=".:/usr/local/bin:/usr/bin:/bin"
+_was_successful () {
+	local zonefile=$1
+	! grep -Eiq '(transfer failed|connection refused|communications error|network unreachable|host unreachable|timed out|no servers could be reached)' $zonefile
+}
+_zone_transfer () {
+	local domain=$1
+	local nameserver=$2
+	local output_file=$output_dir/$domain@$nameserver.txt
+	local tmp="`mktemp --tmpdir=/dev/shm/`"
+	$dig AXFR $domain @$nameserver $dig_args > "$tmp" || true # 2>&1
+	if _was_successful $tmp; then
+		if [ -e $output_file ]; then
+			mv -f -- $output_file $output_file.old
+		fi
+		mv -f -- $tmp $output_file
+	else
+		rm -f -- $tmp
+	fi
+}
+_start_walk () {
+	local tld=$1
+	local root_server=$2
+	# get top level domain nameserver
+	$dig NS $tld @$root_server $dig_args | get-ns-records | while read domain nameserver; do
+		#sleep $(( (RANDOM % 3) + 1 ))
+		_zone_transfer $domain $nameserver
+	done
+}
+tld=${1:-.}
+root_server=$2
+output_dir=zonefiles
+mkdir -p $output_dir || exit
+dig=`command -v dig` || dig=/usr/bin/dig
+dig_args="-r +noadditional +nocomments +noquestion +nocmd +nostats" # +time=15" # timeout
+if [ $root_server ]; then
+	_start_walk $tld $root_server
+else
+	# get dns root nameserver
+	$dig NS . +short | while read root_server; do
+		_start_walk $tld $root_server
+	done
+fi

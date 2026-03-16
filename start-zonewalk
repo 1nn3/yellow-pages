@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -x
+#set -e
+export PATH=".:/usr/local/bin:/usr/bin:/bin"
+if [ ! -e tlds.txt ]; then
+	mk-tlds
+fi
+xargs -P 8 -I {} zone-transfer {} <tlds.txt

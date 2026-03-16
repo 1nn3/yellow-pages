@@ -1,0 +1,160 @@
+#!/usr/bin/perl
+# get-html-title
+# apt install liblwp-protocol-socks-perl liburi-fetch-perl
+# for _ in example.{net,org,com}; do echo $_; done | get-html-title
+
+use feature 'say';
+use strict;
+use warnings;
+use utf8;
+use locale;
+use diagnostics;
+use threads;
+use HTML::Entities;
+use LWP::UserAgent;
+use HTML::HeadParser;
+use URI;
+use URI::Fetch;              # liburi-fetch-perl
+use LWP::Protocol::socks;    # liblwp-protocol-socks-perl
+use Encode;
+
+binmode( STDIN,  ":encoding(UTF-8)" );
+binmode( STDOUT, ":encoding(UTF-8)" );
+binmode( STDERR, ":encoding(UTF-8)" );
+
+use Getopt::Std;
+my %opts;
+getopts( "p:t:s:qv", \%opts )
+    || die("Error in command-line-arguments: $!");
+
+sub start_handler {
+    my ($host) = @_;
+
+    my $scheme = $opts{s} // 'https';
+
+    my $uri = URI->new();
+    $uri->scheme($scheme);
+    $uri->host($host);
+
+    # UserAgent aufbauen
+    my $ua = LWP::UserAgent->new(
+        agent         => '',
+        env_proxy     => 1,
+        show_progress => $opts{v},
+        timeout       => $opts{t} || 3,    # etwas großzügiger
+    );
+
+    # Proxy optional setzen
+    if ( $opts{p} ) {
+        $ua->proxy( $scheme, $opts{p} );
+    }
+
+    # Abfrage starten
+    my $res = URI::Fetch->fetch(
+        $uri,
+        UserAgent     => $ua,
+        ForceResponse => 1,
+    );
+
+    # Inhalt decodieren (falls nicht deklariert)
+    my $content
+        = Encode::decode( 'UTF-8', $res->content, Encode::FB_DEFAULT );
+
+    # Titel extrahieren
+    my $parser = HTML::HeadParser->new;
+    $parser->parse($content);
+
+    my $title = $parser->header('Title');
+    $title = HTML::Entities::decode_entities( $title // "" );
+    $title =~ s/\s+/ /g;
+
+    say $uri, "\t", $title || "N/A";
+
+    return ( $uri, $title );
+}
+
+sub stop_handler {
+    my ( $uri, $title ) = @_;
+}
+
+sub loop_threads {
+
+    my ( $handler_sub, $params ) = @_;
+
+    # max_threads maximale Anzahl Threads/Slots
+    $params->{max_threads} //= 8;
+
+    # Zeit zum abarbeiten von Threads, damit "Slots" frei werden
+    $params->{sleep} //= 3;
+
+    do {
+
+        for (
+            ( $params->{max_threads} )
+            ? threads->list(threads::joinable)
+            : threads->list()
+            )
+        {
+            &{$handler_sub}( $_->join );
+        }
+
+        # Keine "Slots" frei; D.h. warten bis Threads abgearbeitet wurden
+        # und nochmal loop_threads durchlaufen
+
+    } while ( $params->{max_threads}
+        && threads->list >= $params->{max_threads}
+        && sleep $params->{sleep} );
+
+}
+
+sub loop_last_threads {
+    my ($handler_sub) = @_;
+    loop_threads( $handler_sub, { max_threads => defined } );
+}
+
+my $max_threads = 8;
+
+for ( (@ARGV) ? @ARGV : <STDIN> ) {
+    chomp;
+    threads->create( { "context" => "list" }, \&start_handler, ($_) );
+
+    #loop_threads( \&stop_handler, { max_threads => 8, sleep => 3 } );
+    loop_threads( \&stop_handler );
+}
+
+# Als letztes alle übrigen Threads joinen; D.h. auf den letzten warten...
+loop_last_threads( \&stop_handler );
+
+=pod
+
+=encoding utf8
+
+=head1 NAME
+
+get-html-title - Get HTML title of an Website
+
+=head1 SYNOPSIS
+
+B<get-html-title> [options…] <uri…>
+
+=head1 DESCRIPTION
+
+Get HTML title of a Website.
+
+=head1 OPTIONS
+
+=over
+
+=item -p <string>
+
+Proxy.
+
+B<get-html-title.pl> [ -p socks://localhost:9050|http://localhost:4444 ] <uri…>
+
+=back
+
+=head1 SEE ALSO
+
+L<wget(1p)>, L<curl(1p)>
+
+=cut

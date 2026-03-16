@@ -1,0 +1,8 @@
+*~
+*.bak
+lists
+results
+*.swp
+tlds.txt
+zonefiles
+history.text

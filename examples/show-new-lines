@@ -1,0 +1,10 @@
+#!/usr/bin/bash
+set -xe
+keep="16384"
+history="history.text"
+touch $history
+comm -2 -3 <(sort) <(sort $history) | tee -a $history
+# History kürzen
+temp=$(mktemp --tmpdir=/dev/shm/)
+tail -n $keep $history >$temp
+mv $temp $history

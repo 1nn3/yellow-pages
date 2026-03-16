@@ -1,0 +1,9 @@
+#!/usr/bin/awk -f
+# Function to test if a string is a valid domain name
+function is_domain(name) {
+	return name ~ /[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+/
+}
+is_domain($1) && !domain[tolower($1)]++ {
+	print tolower($1);
+}
+

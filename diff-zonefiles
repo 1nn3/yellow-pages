@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -x
+#set -e
+for old in ./zonefiles/*.old; do
+	new=./zonefiles/`basename $old .old`
+	comm -2 -3 <(list-domains $new | sort -u) <(list-domains $old | sort -u)
+done | rm-dot # | examples/get-html-title
